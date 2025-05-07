@@ -1,0 +1,264 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Word Imposter - Social Deduction Game</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
+    body {
+      font-family: 'Roboto', sans-serif;
+      background: #F6F6F6;
+      color: #333333;
+    }
+    .container {
+      max-width: 960px;
+      background: #FFFFFF;
+      border-radius: 4px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      padding: 24px;
+    }
+    .btn-primary {
+      background-color: #00C4B4;
+      color: #FFFFFF;
+      border-radius: 4px;
+      padding: 10px 20px;
+      font-weight: 500;
+      text-transform: uppercase;
+      transition: background-color 0.2s;
+    }
+    .btn-primary:hover {
+      background-color: #00E0C8;
+    }
+    .btn-secondary {
+      background-color: #D3D7D8;
+      color: #333333;
+      border-radius: 4px;
+      padding: 10px 20px;
+      font-weight: 500;
+      text-transform: uppercase;
+      transition: background-color 0.2s;
+    }
+    .btn-secondary:hover {
+      background-color: #E0E4E5;
+    }
+    .btn-copy {
+      background-color: #00C4B4;
+      color: #FFFFFF;
+      border-radius: 4px;
+      padding: 8px 16px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: background-color 0.2s;
+    }
+    .btn-copy:hover {
+      background-color: #00E0C8;
+    }
+    input, select {
+      border: 1px solid #D3D7D8;
+      border-radius: 4px;
+      padding: 8px;
+      font-size: 1rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input:focus, select:focus {
+      border-color: #00C4B4;
+    }
+    .chat-box {
+      max-height: 300px;
+      overflow-y: auto;
+      background: #FFFFFF;
+      border: 1px solid #D3D7D8;
+      border-radius: 4px;
+      padding: 12px;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+      scrollbar-width: thin;
+    }
+    .chat-box::-webkit-scrollbar {
+      width: 6px;
+    }
+    .chat-box::-webkit-scrollbar-track {
+      background: #F6F6F6;
+    }
+    .chat-box::-webkit-scrollbar-thumb {
+      background: #00C4B4;
+      border-radius: 3px;
+    }
+    #rulesModal {
+      display: none;
+      background: rgba(0, 0, 0, 0.5);
+    }
+    #rulesModal.show {
+      display: flex;
+    }
+    #secretWordImage {
+      max-width: 200px;
+      height: auto;
+      border: 1px solid #D3D7D8;
+      border-radius: 4px;
+    }
+    .win-text {
+      font-size: 1.5rem;
+      font-weight: bold;
+      color: #00C4B4;
+    }
+    .lose-text {
+      font-size: 1.5rem;
+      font-weight: bold;
+      color: #FF3333;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex items-center justify-center">
+  <!-- Rules Button -->
+  <button onclick="showRules()" class="fixed top-4 left-4 btn-primary">Rules</button>
+
+  <!-- Rules Modal -->
+  <div id="rulesModal" class="fixed inset-0 flex items-center justify-center">
+    <div class="bg-[#FFFFFF] rounded-[4px] p-6 max-w-lg w-full mx-4 shadow-lg">
+      <h2 class="text-xl font-bold text-[#333333] mb-4">How to Play Word Imposter</h2>
+      <ul class="list-disc list-inside text-[#333333] space-y-2 text-sm">
+        <li><b>Create or Join a Lobby</b>: Enter your name and create a lobby or join one using a 5-letter code. Share the lobby URL to invite friends.</li>
+        <li><b>Game Setup</b>: The host sets timers (clue, discussion, voting) and starts the game with 2+ players.</li>
+        <li><b>Clue Phase</b>: Each player gets a secret word and image. One player (the impostor) gets a different word and image. Submit a clue describing your word within the time limit.</li>
+        <li><b>Discussion Phase</b>: Clues are revealed. Chat with others to identify the impostor based on their clue. Be sneaky if you're the impostor!</li>
+        <li><b>Voting Phase</b>: Vote for who you think the impostor is. The player with the most votes is revealed.</li>
+        <li><b>Reveal Phase</b>: The impostor’s identity and everyone’s words are shown. If the impostor is caught, others win; if not, the impostor wins. Return to the lobby to play again.</li>
+        <li><b>Rejoining</b>: If you disconnect or refresh, rejoin using the lobby code or URL to resume the game.</li>
+      </ul>
+      <button onclick="hideRules()" class="mt-4 btn-primary w-full">Close</button>
+    </div>
+  </div>
+
+  <div class="container mx-auto m-4">
+    <!-- Hero Section -->
+    <div class="text-center mb-6">
+      <h1 class="text-2xl font-bold text-[#333333]">Word Imposter</h1>
+      <p class="text-base text-[#666666] mt-1">Uncover the impostor in this thrilling word game!</p>
+    </div>
+
+    <!-- Lobby Area -->
+    <div id="lobbyArea" class="space-y-6">
+      <!-- Create Lobby -->
+      <div class="flex flex-col gap-3">
+        <h2 class="text-lg font-semibold text-[#333333]">Create a Lobby</h2>
+        <div class="flex flex-col sm:flex-row gap-3 items-center">
+          <input id="createPlayerName" placeholder="Enter your name" maxlength="20" class="w-full sm:w-64">
+          <button onclick="createLobby()" class="btn-primary">Create Lobby</button>
+        </div>
+      </div>
+      <!-- Join Lobby -->
+      <div class="flex flex-col gap-3">
+        <h2 class="text-lg font-semibold text-[#333333]">Join a Lobby</h2>
+        <div class="flex flex-col sm:flex-row gap-3 items-center">
+          <input id="joinPlayerName" placeholder="Enter your name" maxlength="20" class="w-full sm:w-64">
+          <input id="lobbyCodeInput" placeholder="Enter lobby code" maxlength="5" class="w-full sm:w-64">
+          <button onclick="joinLobby()" class="btn-primary">Join Lobby</button>
+        </div>
+      </div>
+      <div id="lobbyCode" class="text-lg font-semibold text-[#333333]"></div>
+      <div id="shareUrl" class="text-base text-[#333333] hidden">
+        Share URL: <a href="#" id="shareUrlLink" class="text-[#00C4B4] underline"></a>
+        <button onclick="copyUrl()" class="btn-copy ml-2">Copy</button>
+      </div>
+      <div id="playerList" class="text-base text-[#333333]"></div>
+      <div id="hostControls" class="space-y-3 hidden">
+        <button onclick="startGame()" class="btn-primary w-full sm:w-auto">Start Game</button>
+        <div class="flex flex-col sm:flex-row gap-3 items-center">
+          <label class="flex items-center gap-2 text-[#333333] text-sm">
+            Clue Time (s):
+            <input id="clueTime" type="number" value="30" min="10" max="60" class="w-16">
+          </label>
+          <label class="flex items-center gap-2 text-[#333333] text-sm">
+            Discussion Time (s):
+            <input id="discussionTime" type="number" value="60" min="30" max="120" class="w-16">
+          </label>
+          <label class="flex items-center gap-2 text-[#333333] text-sm">
+            Voting Time (s):
+            <input id="votingTime" type="number" value="30" min="10" max="60" class="w-16">
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Game Area -->
+    <div id="gameArea" class="hidden space-y-6">
+      <div id="gameState" class="text-lg font-semibold text-[#333333]"></div>
+      <div id="clueTimer" class="text-base font-bold text-[#00C4B4] hidden"></div>
+      <div id="votingTimer" class="text-base font-bold text-[#00C4B4] hidden"></div>
+      <div id="clueArea" class="space-y-3 hidden">
+        <p class="text-base text-[#333333]">Your word: <span id="secretWord" class="font-bold"></span></p>
+        <img id="secretWordImage" src="" alt="Word Image" class="hidden">
+        <div class="flex flex-col sm:flex-row gap-3">
+          <input id="clueInput" placeholder="Enter your clue" maxlength="50" class="w-full">
+          <button onclick="submitClue()" class="btn-primary">Submit Clue</button>
+        </div>
+      </div>
+      <div id="discussionArea" class="space-y-3 hidden">
+        <h3 class="text-lg font-semibold text-[#333333]">Discussion</h3>
+        <div id="discussionTimer" class="text-base font-bold text-[#00C4B4]"></div>
+        <div id="chatBox" class="chat-box"></div>
+        <div class="flex flex-col sm:flex-row gap-3">
+          <input id="chatInput" placeholder="Type your message" maxlength="100" onkeypress="if(event.key === 'Enter') sendChat()" class="w-full">
+          <button onclick="sendChat()" class="btn-primary">Send</button>
+        </div>
+      </div>
+      <div id="votingArea" class="space-y-3 hidden">
+        <h3 class="text-lg font-semibold text-[#333333]">Vote for the Impostor</h3>
+        <div class="flex flex-col sm:flex-row gap-3">
+          <select id="voteSelect" class="w-full"></select>
+          <button onclick="submitVote()" class="btn-primary">Vote</button>
+        </div>
+      </div>
+      <div id="revealArea" class="space-y-3 hidden">
+        <h3 class="text-lg font-semibold text-[#333333]">Game Over</h3>
+        <div id="winLoseText" class="text-center"></div>
+        <div id="revealText" class="text-base text-[#333333]"></div>
+        <button onclick="returnToLobby()" class="btn-primary">Return to Lobby</button>
+      </div>
+    </div>
+  </div>
+  <script src="client.js"></script>
+</body>
+</html>
